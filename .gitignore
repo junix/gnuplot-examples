@@ -1,0 +1,5 @@
+.DS_Store
+
+# Generated images — everything under out/ is reproducible via `just build`
+out/*
+!out/.gitkeep
