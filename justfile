@@ -17,7 +17,7 @@ test: build
     fail=0
     for f in src/[0-9][0-9]-*.gp; do
         stem="$(basename "$f" .gp)"
-        if [[ "$stem" == 12-* ]]; then
+        if [[ "$stem" == 11-* ]]; then
             [[ -f out/frame-029.png ]] || { echo "missing animation frames"; fail=1; }
         else
             for ext in png svg; do
