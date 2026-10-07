@@ -1,5 +1,9 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# Animation frame count `just test` renders and requires; keep in step with
+# the default in src/11-fiber-dispersion-frames.gp. Override: ANIM_NFRAMES=8 just test
+anim_nframes := env_var_or_default("ANIM_NFRAMES", "36")
+
 default: build
 
 # Render every example into ./out (transparent PNG + SVG per script).
@@ -11,19 +15,71 @@ build:
         gnuplot "$f"
     done
 
+# Verify DIR holds the complete animation frame sequence frame-000..frame-(N-1)
+# as usable PNGs — every expected frame present, no extras (usage:
+# just anim-verify DIR [N], N defaults to the 36-frame default of example 11).
+anim-verify dir nframes="36":
+    #!/usr/bin/env bash
+    fail=0
+    nframes={{nframes}}
+    if ! [[ "$nframes" =~ ^[0-9]+$ ]] || (( nframes < 2 )); then
+        echo "anim-verify: frame count must be an integer >= 2, got '$nframes'"
+        exit 1
+    fi
+    if [[ ! -d "{{dir}}" ]]; then
+        echo "anim-verify: no such directory {{dir}}"
+        exit 1
+    fi
+    for ((i = 0; i < nframes; i++)); do
+        frame="$(printf 'frame-%03d.png' "$i")"
+        path="{{dir}}/$frame"
+        if [[ ! -f "$path" ]]; then
+            echo "missing animation frame $frame"
+            fail=1
+            continue
+        fi
+        sig="$(head -c 8 "$path" | od -An -tx1 | tr -d ' \n')"
+        size="$(wc -c < "$path" | tr -d '[:space:]')"
+        if [[ "$sig" != "89504e470d0a1a0a" ]] || (( size < 4096 )); then
+            echo "animation frame $frame is not a usable PNG"
+            fail=1
+        fi
+    done
+    shopt -s nullglob
+    found=( "{{dir}}"/frame-*.png )
+    shopt -u nullglob
+    if (( ${#found[@]} != nframes )); then
+        echo "expected exactly $nframes animation frames, found ${#found[@]}"
+        fail=1
+    fi
+    if (( fail )); then exit 1; fi
+    echo "animation frames 000..$((nframes - 1)) verified in {{dir}}"
+
+# Render the animation into a clean scratch directory — so stale frames under
+# out/ cannot mask an interrupted render — and verify the full frame sequence.
+anim-test:
+    #!/usr/bin/env bash
+    anim="$(mktemp -d)"
+    trap 'rm -rf "$anim"' EXIT
+    mkdir -p "$anim/out"
+    if ! (cd "$anim" && gnuplot -e "nframes={{anim_nframes}}" "{{justfile_directory()}}/src/11-fiber-dispersion-frames.gp"); then
+        echo "animation render failed"
+        exit 1
+    fi
+    "{{just_executable()}}" anim-verify "$anim/out" "{{anim_nframes}}"
+
 # Verify every script produced its expected outputs.
-test: build
+test: build anim-test
     #!/usr/bin/env bash
     fail=0
     for f in src/[0-9][0-9]-*.gp; do
         stem="$(basename "$f" .gp)"
         if [[ "$stem" == 11-* ]]; then
-            [[ -f out/frame-029.png ]] || { echo "missing animation frames"; fail=1; }
-        else
-            for ext in png svg; do
-                [[ -f "out/$stem.$ext" ]] || { echo "missing out/$stem.$ext"; fail=1; }
-            done
+            continue    # animation frames: verified by anim-test
         fi
+        for ext in png svg; do
+            [[ -f "out/$stem.$ext" ]] || { echo "missing out/$stem.$ext"; fail=1; }
+        done
     done
     if (( fail )); then exit 1; fi
     echo "all outputs present"

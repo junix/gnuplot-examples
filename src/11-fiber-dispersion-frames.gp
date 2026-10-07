@@ -23,7 +23,8 @@
 # 100G link on purpose: at 5 ps, 80 km of SMF broadens the pulse by a factor
 # of ~190 and nothing survives inside a frozen time window.
 
-nframes = exists("nframes") ? nframes : 36      # >= 30: 'just test' looks for frame-029
+nframes = exists("nframes") ? nframes : 36      # 'just test' renders with an explicit
+                                               # nframes and requires frames 000..nframes-1
 zmax    = exists("zmax")    ? zmax    : 80.0    # km
 
 jj    = {0,1}
